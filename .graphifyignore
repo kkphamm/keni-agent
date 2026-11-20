@@ -1,0 +1,14 @@
+.env
+.env.*
+gmail-client*.json
+gmail-token.json
+client_secret_*.apps.googleusercontent.com.json
+credentials.json
+token.json
+spotify.json
+.cache-spotify*
+desktop-token
+*.log
+.venv/
+.build/
+macOS/.build/

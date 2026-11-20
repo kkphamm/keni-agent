@@ -1,0 +1,10 @@
+**
+!Dockerfile
+!pyproject.toml
+!uv.lock
+!agent/
+agent/**
+!agent/*.py
+!tests/
+tests/**
+!tests/*.py

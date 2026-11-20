@@ -1,0 +1,35 @@
+#!/bin/sh
+set -eu
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+scratch="$root/.build/swift"
+destination="$root/.build/Local Voice Agent.app"
+
+swift build --package-path "$root/macOS" --scratch-path "$scratch" --jobs 6 \
+    -Xlinker -rpath -Xlinker '@executable_path/../Frameworks'
+bin_dir=$(swift build --package-path "$root/macOS" --scratch-path "$scratch" --show-bin-path)
+
+stage=$(mktemp -d "$root/.build/app.XXXXXX")
+trap 'rm -rf "$stage"' EXIT
+app="$stage/Local Voice Agent.app"
+contents="$app/Contents"
+mkdir -p "$contents/MacOS" "$contents/Frameworks" "$contents/Resources"
+
+cp "$root/macOS/Info.plist" "$contents/Info.plist"
+/usr/bin/plutil -insert KeniProjectRoot -string "$root" "$contents/Info.plist"
+/usr/bin/plutil -lint "$contents/Info.plist"
+install -m 755 "$bin_dir/LocalVoiceAgent" "$contents/MacOS/LocalVoiceAgent"
+install -m 644 "$root/macOS/AppIcon.icns" "$contents/Resources/AppIcon.icns"
+
+for name in LiveKitWebRTC RustLiveKitFFI; do
+    framework="$contents/Frameworks/$name.framework"
+    /usr/bin/ditto "$bin_dir/$name.framework" "$framework"
+    /usr/bin/codesign --force --sign - "$framework"
+done
+/usr/bin/ditto "$bin_dir/LiveKit_LiveKit.bundle" "$contents/Resources/LiveKit_LiveKit.bundle"
+/usr/bin/codesign --force --sign - "$app"
+/usr/bin/codesign --verify --deep --strict "$app"
+
+rm -rf "$destination"
+mv "$app" "$destination"
+printf '%s\n' "$destination"

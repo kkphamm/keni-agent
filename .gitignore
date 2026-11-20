@@ -1,0 +1,22 @@
+# Credentials and local runtime state
+.env
+.env.*
+gmail-client*.json
+gmail-token.json
+client_secret_*.apps.googleusercontent.com.json
+credentials.json
+token.json
+spotify.json
+.cache-spotify*
+desktop-token
+*.log
+
+# Build output and caches
+.venv/
+.build/
+.swiftpm/
+.DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+graphify-out/

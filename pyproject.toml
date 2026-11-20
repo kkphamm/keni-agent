@@ -1,0 +1,13 @@
+[project]
+name = "keni-agent"
+version = "0.1.0"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "google-auth-oauthlib>=1.2,<2",
+    "livekit-agents[openai]>=1.3,<2",
+    "psycopg[binary]>=3.3,<4",
+    "python-dotenv>=1.0,<2",
+    "spotipy>=2.25,<3",
+    "uvicorn>=0.34,<1",
+]
