@@ -2,6 +2,11 @@
 
 Local Voice Agent is a native macOS app that takes spoken requests, streams a live transcript, and shows an outcome for each action. V1 opens Mac apps and the configured IRDX repository in VS Code, integrates Spotify track search and playback, and keeps local action history across app restarts.
 
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="docs/keni-demo-poster.webp">
+  <img src="docs/keni-demo.gif" alt="Keni listens for a voice request to open IRDX in VS Code, then shows the completed action in History." width="704">
+</picture>
+
 ## Set up PostgreSQL once
 
 Install PostgreSQL 18 before running `./scripts/start`. [Homebrew PostgreSQL 18](https://formulae.brew.sh/formula/postgresql@18)
