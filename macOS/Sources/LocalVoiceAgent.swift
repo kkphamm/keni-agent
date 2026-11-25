@@ -13,6 +13,10 @@ struct LocalVoiceAgent: App {
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 660, height: 518)
         .windowResizability(.contentMinSize)
+
+        Settings {
+            ListeningSettings(onChange: delegate.refreshListeningOverlay)
+        }
     }
 }
 
@@ -23,13 +27,15 @@ final class DesktopDelegate: NSObject, NSApplicationDelegate {
     private lazy var listeningOverlay = ListeningOverlay(voice: voice)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        voice.microphoneDidChange = { [weak self] in self?.listeningOverlay.update() }
+        voice.microphoneDidChange = { [weak self] in
+            Task { @MainActor in self?.listeningOverlay.update() }
+        }
         let hotKey = MicHotKey { [weak voice] held in voice?.setTalkHeld(held, by: .shortcut) }
         let status = hotKey.register()
         if status == noErr {
             self.hotKey = hotKey
         } else {
-            voice.shortcutError = "⌘⇧Space is unavailable. Hold the talk button or free the shortcut in System Settings."
+            voice.shortcutError = "Shift+Space is unavailable. Hold the talk button or free the shortcut in System Settings."
         }
         voice.monitorService()
     }
@@ -40,22 +46,40 @@ final class DesktopDelegate: NSObject, NSApplicationDelegate {
         listeningOverlay.screenDidChange()
     }
 
+    func refreshListeningOverlay() { listeningOverlay.update() }
+
     func applicationWillTerminate(_ notification: Notification) {
         hotKey?.unregister()
         voice.shutDown()
     }
 }
 
+private struct ListeningSettings: View {
+    @AppStorage(ListeningOverlay.preferenceKey) private var showListeningPill = true
+    let onChange: () -> Void
+
+    var body: some View {
+        Form {
+            Toggle("Show listening pill while speaking", isOn: $showListeningPill)
+                .onChange(of: showListeningPill) { _, _ in onChange() }
+        }
+        .padding(24)
+        .frame(minWidth: 330)
+    }
+}
+
 private struct VoiceWindow: View {
     private enum Page {
-        case assistant, history
+        case assistant, history, spotify
     }
 
     let voice: VoiceSession
     @State private var page: Page = .assistant
     @State private var isHoveringMic = false
     @State private var spotifyError: String?
-    @State private var showingGmailInbox = false
+    @State private var text = ""
+    @State private var isSendingText = false
+    @State private var textError: String?
     @FocusState private var isMicFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -71,22 +95,19 @@ private struct VoiceWindow: View {
                 .padding(.top, 38)
                 .padding(.bottom, 15)
 
-            Picker("View", selection: $page) {
-                Text("Assistant").tag(Page.assistant)
-                Text("History").tag(Page.history)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 176)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 24)
-            .padding(.bottom, 14)
+            navigation
+                .padding(.horizontal, 24)
+                .padding(.bottom, 14)
 
             switch page {
             case .assistant:
                 assistantContent
             case .history:
                 HistoryView(voice: voice, accent: accent)
+            case .spotify:
+                SpotifyPanel(voice: voice)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 14)
             }
 
             Divider().padding(.horizontal, 24)
@@ -108,8 +129,34 @@ private struct VoiceWindow: View {
         } message: {
             Text(spotifyError ?? "")
         }
-        .sheet(isPresented: $showingGmailInbox) {
-            GmailInbox(voice: voice)
+    }
+
+    private var navigation: some View {
+        let quietMode = Binding(
+            get: { voice.quietMode },
+            set: { enabled in voice.setQuietMode(enabled) }
+        )
+        return VStack(alignment: .trailing, spacing: 7) {
+            HStack(spacing: 14) {
+                Picker("View", selection: $page) {
+                    Text("Assistant").tag(Page.assistant)
+                    Text("History").tag(Page.history)
+                    Text("Spotify").tag(Page.spotify)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 252)
+                Spacer(minLength: 0)
+                Toggle("Quiet Mode", isOn: quietMode)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .fixedSize()
+                    .help("Show Keni’s replies in the transcript without audio")
+                    .disabled(voice.isUpdatingQuietMode)
+            }
+            if let error = voice.quietModeError {
+                Text(error).font(.caption).foregroundStyle(.orange)
+            }
         }
     }
 
@@ -123,6 +170,7 @@ private struct VoiceWindow: View {
                 if let error = voice.shortcutError {
                     feedback(error, icon: "keyboard", color: .secondary)
                 }
+                textInput
                 if let session = voice.liveSession {
                     LiveTranscript(session: session)
                 } else {
@@ -134,6 +182,38 @@ private struct VoiceWindow: View {
             .padding(.bottom, 18)
         }
         .defaultScrollAnchor(.top)
+    }
+
+    private var textInput: some View {
+        let command = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let canSend = voice.canSendText && !isSendingText && !command.isEmpty
+        return VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                TextField("Type a request", text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(isSendingText)
+                    .onSubmit { if canSend { sendText(command) } }
+                Button(isSendingText ? "Sending…" : "Send") { sendText(command) }
+                    .disabled(!canSend)
+            }
+            if let textError {
+                feedback(textError, icon: "exclamationmark.circle", color: .orange)
+            }
+        }
+    }
+
+    private func sendText(_ command: String) {
+        isSendingText = true
+        textError = nil
+        Task {
+            defer { isSendingText = false }
+            do {
+                try await voice.sendText(command)
+                text = ""
+            } catch {
+                textError = error.localizedDescription
+            }
+        }
     }
 
     private var header: some View {
@@ -181,7 +261,7 @@ private struct VoiceWindow: View {
                         Image(systemName: voice.isTalkHeld ? "mic.slash" : "mic")
                         Spacer()
                         if voice.shortcutError == nil {
-                            Text("⌘⇧Space")
+                            Text("⇧Space")
                                 .font(.system(.caption, design: .monospaced))
                                 .foregroundStyle(.secondary)
                         }
@@ -199,7 +279,7 @@ private struct VoiceWindow: View {
             .focused($isMicFocused)
             .onHover { isHoveringMic = $0 }
             .accessibilityLabel(microphoneButton)
-            .accessibilityHint(voice.shortcutError == nil ? "Hold Command Shift Space to speak, then release" : "Hold to speak, then release")
+            .accessibilityHint(voice.shortcutError == nil ? "Hold Shift and Space to speak, then release" : "Hold to speak, then release")
         }
         .padding(22)
         .frame(maxWidth: .infinity)
@@ -328,8 +408,6 @@ private struct VoiceWindow: View {
                     Label("Connected", systemImage: "checkmark.circle")
                         .font(.subheadline)
                         .foregroundStyle(accent)
-                    Button("Inbox") { showingGmailInbox = true }
-                        .help("View your Gmail inbox")
                 } else if voice.gmailConfigured {
                     Button(voice.isAuthorizingGmail ? "Opening Gmail…" : "Connect Gmail") {
                         Task { await voice.connectGmail() }

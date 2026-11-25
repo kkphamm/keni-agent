@@ -32,7 +32,7 @@ final class MicHotKey {
         }, events.count, events, Unmanaged.passUnretained(self).toOpaque(), &handler)
         guard result == noErr else { return result }
 
-        let status = RegisterEventHotKey(UInt32(kVK_Space), UInt32(cmdKey | shiftKey),
+        let status = RegisterEventHotKey(UInt32(kVK_Space), UInt32(shiftKey),
                                         Self.identity, target, OptionBits(kEventHotKeyExclusive), &registration)
         if status != noErr { unregister() }
         return status
@@ -63,7 +63,10 @@ final class MicHotKey {
     }
 
     private static var isSpaceDown: Bool {
-        CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(kVK_Space))
+        let key = CGKeyCode(kVK_Space)
+        // A captured global hotkey can be absent from the session's key state.
+        return CGEventSource.keyState(.hidSystemState, key: key)
+            || CGEventSource.keyState(.combinedSessionState, key: key)
     }
 
     private func setHeld(_ held: Bool) {
@@ -88,7 +91,9 @@ final class MicHotKey {
                     finishPress()
                     return
                 }
-                if !NSEvent.modifierFlags.contains([.command, .shift]) {
+                let shiftIsDown = CGEventSource.flagsState(.hidSystemState).contains(.maskShift)
+                    || NSEvent.modifierFlags.contains(.shift)
+                if !shiftIsDown {
                     setHeld(false)
                 }
             }

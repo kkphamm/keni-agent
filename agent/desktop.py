@@ -1,9 +1,11 @@
-from datetime import timedelta
 import secrets
+from collections.abc import Callable
+from datetime import timedelta
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Response
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Response
 from livekit import api
+from pydantic import BaseModel, StringConstraints
 
 from agent import gmail_tools, history, settings, spotify_tools
 
@@ -26,6 +28,8 @@ def health() -> dict[str, bool | str | None]:
     return {
         "spotifyConfigured": spotify_configured,
         "spotifyConnected": spotify_configured and spotify_tools.connected(),
+        "spotifyTopTracksAuthorized": spotify_tools.top_tracks_authorized(),
+        "spotifyAuthorizationPending": spotify_tools.authorization_pending(),
         "spotifyAuthorizationError": spotify_tools.authorization_error,
         "gmailConfigured": gmail_configured,
         "gmailConnected": gmail_configured and gmail_tools.connected(),
@@ -57,12 +61,63 @@ def session() -> dict[str, str]:
     return {"url": settings.LIVEKIT_URL, "token": token}
 
 
-@app.post("/spotify/authorize", dependencies=[Depends(verify_desktop)])
-def spotify_authorize() -> dict[str, str]:
+spotify = APIRouter(prefix="/spotify", dependencies=[Depends(verify_desktop)])
+
+
+def _spotify_result[T](response: Response, operation: Callable[[], T]) -> T:
     try:
-        return {"message": spotify_tools.authorize()}
+        result = operation()
     except RuntimeError as exc:
-        raise HTTPException(409, str(exc)) from None
+        raise HTTPException(409, str(exc), headers={"Cache-Control": "no-store"}) from None
+    response.headers["Cache-Control"] = "no-store"
+    return result
+
+
+@spotify.post("/authorize")
+def spotify_authorize(response: Response) -> dict[str, str]:
+    return {"message": _spotify_result(response, spotify_tools.authorize)}
+
+
+@spotify.post("/disconnect")
+def spotify_disconnect(response: Response) -> dict[str, str]:
+    return {"message": _spotify_result(response, spotify_tools.disconnect)}
+
+
+@spotify.get("/account")
+def spotify_account(response: Response) -> dict:
+    return _spotify_result(response, spotify_tools.account)
+
+
+@spotify.get("/top-tracks")
+def spotify_top_tracks(response: Response) -> dict:
+    return {"tracks": _spotify_result(response, spotify_tools.top_tracks)}
+
+
+@spotify.get("/playlists")
+def spotify_playlists(response: Response) -> dict:
+    return {"playlists": _spotify_result(response, spotify_tools.playlists)}
+
+
+class SpotifyTrack(BaseModel):
+    uri: Annotated[str, StringConstraints(pattern=r"^spotify:track:[A-Za-z0-9]+$", max_length=100)]
+
+
+class SpotifyPlaylistLink(BaseModel):
+    uri: Annotated[str, StringConstraints(pattern=r"^spotify:playlist:[A-Za-z0-9]+$", max_length=100)]
+    linked: bool
+
+
+@spotify.post("/play-track")
+def spotify_play_track(track: SpotifyTrack, response: Response) -> dict[str, str]:
+    return {"message": _spotify_result(response, lambda: spotify_tools.play_track_uri(track.uri))}
+
+
+@spotify.post("/playlist-link")
+def spotify_playlist_link(link: SpotifyPlaylistLink, response: Response) -> dict[str, str]:
+    return {"message": _spotify_result(response, lambda: spotify_tools.set_playlist_link(link.uri, link.linked))}
+
+
+app.include_router(spotify)
 
 
 @app.post("/gmail/authorize", dependencies=[Depends(verify_desktop)])

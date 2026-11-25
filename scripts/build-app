@@ -4,6 +4,7 @@ set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 scratch="$root/.build/swift"
 destination="$root/.build/Local Voice Agent.app"
+signing_identity=${KENI_CODESIGN_IDENTITY:--}
 
 swift build --package-path "$root/macOS" --scratch-path "$scratch" --jobs 6 \
     -Xlinker -rpath -Xlinker '@executable_path/../Frameworks'
@@ -24,10 +25,10 @@ install -m 644 "$root/macOS/AppIcon.icns" "$contents/Resources/AppIcon.icns"
 for name in LiveKitWebRTC RustLiveKitFFI; do
     framework="$contents/Frameworks/$name.framework"
     /usr/bin/ditto "$bin_dir/$name.framework" "$framework"
-    /usr/bin/codesign --force --sign - "$framework"
+    /usr/bin/codesign --force --sign "$signing_identity" "$framework"
 done
 /usr/bin/ditto "$bin_dir/LiveKit_LiveKit.bundle" "$contents/Resources/LiveKit_LiveKit.bundle"
-/usr/bin/codesign --force --sign - "$app"
+/usr/bin/codesign --force --sign "$signing_identity" "$app"
 /usr/bin/codesign --verify --deep --strict "$app"
 
 rm -rf "$destination"

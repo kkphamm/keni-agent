@@ -3,6 +3,7 @@ import SwiftUI
 
 @MainActor
 final class ListeningOverlay {
+    static let preferenceKey = "showListeningPill"
     private static let size = NSSize(width: 122, height: 46)
     private let voice: VoiceSession
     private var panel: NSPanel?
@@ -12,7 +13,7 @@ final class ListeningOverlay {
     }
 
     func update() {
-        guard voice.isTalkHeld else {
+        guard voice.isTalkHeld, UserDefaults.standard.object(forKey: Self.preferenceKey) as? Bool != false else {
             panel?.orderOut(nil)
             return
         }

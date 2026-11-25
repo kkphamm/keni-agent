@@ -130,6 +130,9 @@ async def run_actions(
     *,
     spotify_track: str | None = None,
     spotify_artist: str | None = None,
+    spotify_playlist: str | None = None,
+    spotify_artist_mix: str | None = None,
+    spotify_mix: str | None = None,
     open_irdx_in_vscode: bool = False,
     app_to_open: str | None = None,
 ) -> dict[str, str]:
@@ -157,8 +160,14 @@ async def run_actions(
         return action, message
 
     jobs = []
-    if (spotify_track or "").strip() or (spotify_artist or "").strip():
+    if spotify_playlist and spotify_playlist.strip():
+        jobs.append(run("spotify", lambda: spotify_tools.play_playlist(spotify_playlist)))
+    elif (spotify_track or "").strip() or (spotify_artist or "").strip():
         jobs.append(run("spotify", lambda: spotify_tools.play_track(spotify_track, spotify_artist)))
+    elif spotify_artist_mix and spotify_artist_mix.strip():
+        jobs.append(run("spotify", lambda: spotify_tools.play_artist(spotify_artist_mix)))
+    elif spotify_mix and spotify_mix.strip():
+        jobs.append(run("spotify", lambda: spotify_tools.play_mix(spotify_mix)))
     if open_irdx_in_vscode:
         jobs.append(run("vscode", open_irdx))
     if app_to_open and app_to_open.strip():

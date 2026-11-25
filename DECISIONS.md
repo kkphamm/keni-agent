@@ -2,7 +2,7 @@
 
 ## Ship a Finder-launchable app
 
-Use SwiftUI and the native LiveKit Swift SDK. A native bundle gives macOS ownership of microphone permissions and supports ⌘⇧Space as a global shortcut. SwiftPM and the command-line build script cover the local development deliverable. The alternative browser client would require a different launch and shortcut experience.
+Use SwiftUI and the native LiveKit Swift SDK. A native bundle gives macOS ownership of microphone permissions and supports Shift+Space as a global shortcut. SwiftPM and the command-line build script cover the local development deliverable. The alternative browser client would require a different launch and shortcut experience.
 
 ## Keep orchestration and desktop actions local
 
@@ -11,6 +11,8 @@ Use the LiveKit development server and a Python worker on the same Mac. Managed 
 ## Reuse the existing Spotify flow
 
 Adapt the Spotify Bot's Spotipy Authorization Code flow and track search. Start the Spotify desktop app and identify this Mac by its computer name in Spotify Connect before requesting and verifying playback. Use a separately registered loopback callback and store the OAuth cache in this app's support directory so authorization works independently of Spotify Bot. Spotify's developer policy prohibits third-party voice control of its service. [Spotify Developer Policy](https://developer.spotify.com/policy#iii-some-prohibited-applications)
+
+Send the requested song and its follow-ups in one ordered queue. Where the Recommendations endpoint is unavailable, build the rest of the queue from playable artist or album tracks. Play artist and playlist contexts directly so mood mixes can work with accessible playlist contexts without fetching their private contents. [Spotify Web API access changes](https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api) · [Spotify Development Mode migration guide](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide)
 
 ## Persist local action history in V1
 

@@ -33,6 +33,38 @@ class ActionsTest(unittest.IsolatedAsyncioTestCase):
         play.assert_called_once_with(None, "Perfume")
         self.assertEqual(result, {"spotify": "Playing Polyrhythm by Perfume."})
 
+    async def test_playlist_runs_as_one_spotify_action(self):
+        events = []
+
+        async def publish(event):
+            events.append(event)
+
+        with (
+            patch.object(actions.spotify_tools, "play_playlist", return_value="Playing playlist My Mix on this Mac.") as playlist,
+            patch.object(actions.spotify_tools, "play_track") as track,
+        ):
+            result = await actions.run_actions(publish, spotify_playlist="My Mix", spotify_track="My Mix")
+
+        playlist.assert_called_once_with("My Mix")
+        track.assert_not_called()
+        self.assertEqual(result, {"spotify": "Playing playlist My Mix on this Mac."})
+        self.assertEqual([event["state"] for event in events], ["running", "succeeded"])
+
+    async def test_spotify_mix_requests_route_to_the_named_playback_mode(self):
+        async def publish(_event):
+            pass
+
+        for argument, operation, name in (
+            ("spotify_artist_mix", "play_artist", "Perfume"),
+            ("spotify_mix", "play_mix", "study lofi"),
+        ):
+            with (
+                self.subTest(argument=argument),
+                patch.object(actions.spotify_tools, operation, return_value="Playing a mix.") as play,
+            ):
+                self.assertEqual(await actions.run_actions(publish, **{argument: name}), {"spotify": "Playing a mix."})
+                play.assert_called_once_with(name)
+
     async def test_independent_actions_overlap_and_report_their_own_outcome(self):
         events = []
         both_started = Barrier(2, timeout=2)
